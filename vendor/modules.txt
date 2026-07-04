@@ -255,3 +255,4 @@ k8s.io/klog/v2/internal/sloghandler
 # k8s.io/kubelet v0.36.3
 ## explicit; go 1.26.0
 k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1
+k8s.io/kubelet/pkg/apis/podresources/v1
