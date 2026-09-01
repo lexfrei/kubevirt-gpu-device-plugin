@@ -18,7 +18,7 @@ The consequence for this feature:
 - The VF → parent Physical Function (PF) mapping is already read during discovery via each VF's `physfn` sysfs symlink (`vfio_vgpu.go`), and NVML is already used at discovery time (`resolveVgpuTypeNamesViaNVML`). So both inputs the resolver needs (PF address, NVML) are established patterns in this codebase.
 - There is **no release/deallocate callback** in the Kubernetes device plugin API. Kubelet calls `Allocate` when a container is created; it never calls the plugin back when the container/pod goes away. This shapes the deactivation design (below).
 
-### What the current fork does NOT give us for free
+### What the plugin does not already provide
 
 - `Allocate` does not initialise NVML today (only discovery and the health check do). Resolving VF → FM `physicalId` needs NVML, so either the VF → partition map is computed once at discovery/startup and cached, or NVML is initialised on demand in the activation path. NVML `Init`/`Shutdown` are reference-counted, so an on-demand `Init`+`Shutdown` around the lookup composes safely with any NVML already open.
 - `fmGetSupportedFabricPartitions` reports each partition's **active state and its GPUs**, but not the **VF** currently bound to an active partition. Since activation is single-VF and idempotent per `Allocate`, this does not matter for activation; the pod-resources reconciler covers deactivation.
@@ -60,8 +60,6 @@ Options considered for talking to FM:
 1. **cgo against `libnvfm` via the official go-nvfm bindings (chosen).** Direct, in-process, uses the same ABI NVIDIA ships and versions. `github.com/NVIDIA/go-nvfm` `dlopen`s `libnvfm.so` at runtime (as the vendored `go-nvml` does for `libnvidia-ml`) rather than linking it, and ships its own copy of the FM SDK headers, so NVIDIA's proprietary headers are not vendored into this repository. Cost: the image must ship a `libnvfm.so.1` whose ABI is compatible with the host FM daemon, and cgo must be enabled in the build (it already is). We point go-nvfm at the versioned SONAME `libnvfm.so.1` (the runtime image ships only that, not the unversioned `-dev` symlink).
 2. **Subprocess `nvidia-smi` / a helper binary.** `nvidia-smi` can list and activate partitions, but shelling out per allocation is slower, has a coarse text/return-code interface, needs the tool present in a distroless image, and still couples to an NVIDIA binary's CLI contract. It buys nothing over cgo while being harder to error-handle precisely.
 3. **Hand-rolled socket protocol to `127.0.0.1:6666` / the Unix socket.** FM's wire protocol is an internal, undocumented, unstable protobuf/RPC. Reimplementing it would be a large, fragile surface that breaks on any FM release. Rejected.
-
-An earlier iteration declared the FM ABI inline in the cgo preamble and linked the versioned soname with `-l:libnvfm.so.1`. Switching to go-nvfm removes that hand-maintained ABI transcription in favour of NVIDIA's officially maintained bindings, and moves from link-time coupling to a runtime `dlopen`, so the plugin binary no longer has `libnvfm.so.1` as a hard `NEEDED` dependency.
 
 ### Version coupling with the daemon
 
@@ -160,21 +158,3 @@ MIG-mode GPUs disable NVLink and are not part of the NVSwitch fabric, so a MIG g
 
 - `pkg/fabric` binding (go-nvfm-backed cgo + stub), return-code mapping, BDF parsing, address-type helper, and the VF→partition resolver — implemented and unit-tested; the cgo binding is verified to compile against go-nvfm under linux + cgo.
 - `Allocate` activation into `GenericDevicePlugin` (single-VF activation, MIG-skip, `isActive` steady-state skip, fail-mode) and the pod-resources reconciler for deactivation — implemented and unit-tested with a fake Fabric Manager client.
-
-## Draft PR description
-
-> Title: `feat: activate NVLink fabric partitions for vGPU VFs on NVSwitch systems`
-
-Addresses NVIDIA/kubevirt-gpu-device-plugin#133.
-
-On NVSwitch systems (HGX H100/H200) running SR-IOV vGPU with Fabric Manager in `FABRIC_MODE=2`, a whole-card (NVLink-enabled) guest cannot initialise CUDA — `cuInit` fails with error `802` ("system not yet initialized") — until its VF's NVLink fabric partition is activated through the Fabric Manager SDK. The device plugin hands the VF to the `virt-launcher` pod but nothing activates the fabric partition, so those guests fail CUDA on these systems.
-
-This change activates the VF's single-GPU fabric partition during `Allocate`, before the guest starts, giving working CUDA from the first init with per-VM NVLink isolation:
-
-- A self-contained `pkg/fabric` wraps `libnvfm` (the `nv_fm_agent` API) through the official [go-nvfm](https://github.com/NVIDIA/go-nvfm) bindings, with a portable stub so non-linux / `CGO_ENABLED=0` builds are unaffected. go-nvfm `dlopen`s `libnvfm` at runtime and ships the FM SDK headers, so no proprietary headers are vendored here.
-- `Allocate` resolves the VF → parent PF → FM `physicalId` (NVML module id) → single-GPU partition, matched strictly on `physicalId` (never PCI order), then activates the partition for exactly that VF (`fmActivateFabricPartitionWithVFs` takes one VF per GPU).
-- MIG-mode GPUs have NVLink disabled and are not in the fabric, so their VFs need no activation and are skipped (`nvmlDeviceGetMigMode`). Only whole-card VFs are activated.
-- Activation is gated by `FABRIC_PARTITION_ACTIVATION` (default `auto`), a no-op on non-NVSwitch systems and classic passthrough GPUs. `FABRIC_FAIL_MODE` (default `closed`) chooses whether an FM error fails the allocation or is logged and allowed. A pod-resources reconciler deactivates a partition once its VF is gone.
-- The runtime image bundles a pinned `libnvfm.so.1`; the pod needs `hostNetwork` (to reach the FM command API on `127.0.0.1:6666`) and the pod-resources socket mounted, and FM in `FABRIC_MODE=2`.
-
-See `docs/fabric-partition-activation.md` for the full design.
