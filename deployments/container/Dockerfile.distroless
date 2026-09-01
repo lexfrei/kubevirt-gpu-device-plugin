@@ -42,16 +42,18 @@ RUN yum install -y wget tar gzip make gcc glibc-devel binutils xz
 # versioned shared object is copied into the runtime image below). go-nvfm ships
 # its own copy of the FM SDK headers, so the proprietary headers are not vendored
 # into this repository.
+# The CUDA repository names its 64-bit ARM server directory sbsa, not aarch64,
+# so the repository path and the Debian architecture suffix are picked separately.
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "${arch}" in \
-        x86_64) DEB_ARCH='amd64' ;; \
-        aarch64) DEB_ARCH='arm64' ;; \
+        x86_64) REPO_ARCH='x86_64'; DEB_ARCH='amd64' ;; \
+        aarch64) REPO_ARCH='sbsa'; DEB_ARCH='arm64' ;; \
         *) echo "unsupported architecture ${arch} for libnvfm" ; exit 1 ;; \
     esac; \
     cd /tmp; \
     wget -nv -O fm.deb \
-        "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/${arch}/nvidia-fabricmanager-dev_${FABRIC_MANAGER_VERSION}_${DEB_ARCH}.deb"; \
+        "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/${REPO_ARCH}/nvidia-fabricmanager-dev_${FABRIC_MANAGER_VERSION}_${DEB_ARCH}.deb"; \
     ar x fm.deb; \
     tar xf data.tar.xz; \
     cp usr/lib/*/libnvfm.so.1 /usr/lib64/libnvfm.so.1; \
@@ -114,9 +116,11 @@ COPY --from=builder /workspace/nvidia-kubevirt-gpu-device-plugin /usr/bin/
 COPY --from=builder /workspace/utils/pci.ids /usr/pci.ids
 COPY THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md
 # libnvfm.so.1 for the fabric partition activation binding. go-nvfm dlopen's it
-# at runtime, so it must be present in the runtime image on the loader search
-# path (go-nvfm is pointed at this versioned SONAME by pkg/fabric).
-COPY --from=builder /usr/lib64/libnvfm.so.1 /usr/lib/x86_64-linux-gnu/libnvfm.so.1
+# at runtime, so it must be on the runtime image's loader search path (pkg/fabric
+# points go-nvfm at this versioned SONAME). /usr/lib is built into the loader's
+# search path in this base image on both published architectures, so one
+# destination serves both.
+COPY --from=builder /usr/lib64/libnvfm.so.1 /usr/lib/libnvfm.so.1
 
 USER 0:0
 
