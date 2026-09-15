@@ -30,7 +30,7 @@ permissions:
 jobs:
   upload-notices:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -54,6 +54,26 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
           persist-credentials: false
 
+      - name: Verify release metadata
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's/^VERSION ?= //p' versions.mk)
+          test "${VERSION}" = "${RELEASE_TAG}" || {
+            echo "::error::release tag and versions.mk disagree"
+            exit 1
+          }
+          echo "GOLANG_VERSION=$(sed -n 's/^GOLANG_VERSION ?= //p' versions.mk)" >> "$GITHUB_ENV"
+
+      - name: Install Go for notice verification
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GOLANG_VERSION }}
+
+      - name: Verify notice matches tagged dependencies
+        run: make notices-check
+
       - name: Verify the committed notice
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
@@ -66,8 +86,10 @@ jobs:
           git ls-files --error-unmatch THIRD_PARTY_NOTICES.md >/dev/null
           sha256sum THIRD_PARTY_NOTICES.md
 
-      - name: Attach the exact committed notice to the GitHub Release
+      # Do not overwrite an existing asset: it may be an approved historical
+      # correction that intentionally differs from the original tagged notice.
+      - name: Attach the committed notice without replacing an existing asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: gh release upload "${RELEASE_TAG}" THIRD_PARTY_NOTICES.md --clobber
+        run: gh release upload "${RELEASE_TAG}" THIRD_PARTY_NOTICES.md

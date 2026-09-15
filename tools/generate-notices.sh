@@ -27,13 +27,13 @@ OUTPUT="${OUTPUT:-THIRD_PARTY_NOTICES.md}"
 GO_LICENSES="${GO_LICENSES:-${PWD}/bin/go-licenses}"
 MODULES_TXT="${MODULES_TXT:-vendor/modules.txt}"
 MULTI_ARCH_MK="${MULTI_ARCH_MK:-deployments/container/multi-arch.mk}"
+DOCKERFILE="${DOCKERFILE:-deployments/container/Dockerfile.distroless}"
 PCI_IDS_FILE="${PCI_IDS_FILE:-utils/pci.ids}"
 VERSIONS_MK="${VERSIONS_MK:-versions.mk}"
 COPYRIGHTS_TSV="${COPYRIGHTS_TSV:-tools/notices/copyrights.tsv}"
 RUNTIME_FILES_TEMPLATE="${RUNTIME_FILES_TEMPLATE:-tools/notices/runtime-files.gotmpl}"
 
 SOURCE_REPOSITORY="https://github.com/NVIDIA/kubevirt-gpu-device-plugin"
-BASE_SOURCE_URL="https://developer.download.nvidia.com/distroless-oss/go/v4.0.2/index.html"
 
 PACKAGES=("./cmd")
 PLATFORMS=(
@@ -95,6 +95,7 @@ check_prerequisites() {
     for file in \
         "${MODULES_TXT}" \
         "${MULTI_ARCH_MK}" \
+        "${DOCKERFILE}" \
         "${PCI_IDS_FILE}" \
         "${VERSIONS_MK}" \
         "${COPYRIGHTS_TSV}" \
@@ -110,6 +111,13 @@ resolve_release_metadata() {
     RELEASE_VERSION=$(sed -n 's/^VERSION ?= //p' "${VERSIONS_MK}" | head -1)
     [[ "${RELEASE_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die \
         "could not determine a release version from ${VERSIONS_MK}."
+
+    BUILDER_IMAGE=$(awk '$1 == "FROM" { print $2; exit }' "${DOCKERFILE}")
+    RUNTIME_BASE_IMAGE=$(awk '$1 == "FROM" { image = $2 } END { print image }' "${DOCKERFILE}")
+    [[ "${RUNTIME_BASE_IMAGE}" =~ ^nvcr\.io/nvidia/distroless/go:v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die \
+        "could not determine the versioned NVIDIA distroless Go runtime base from ${DOCKERFILE}."
+    BASE_IMAGE_VERSION="${RUNTIME_BASE_IMAGE##*:}"
+    BASE_SOURCE_URL="https://developer.download.nvidia.com/distroless-oss/go/${BASE_IMAGE_VERSION}/index.html"
 
     APP_SOURCE_URL="${SOURCE_REPOSITORY}/archive/refs/tags/${RELEASE_VERSION}.tar.gz"
     PCI_SOURCE_URL="${SOURCE_REPOSITORY}/blob/${RELEASE_VERSION}/utils/pci.ids"
@@ -452,22 +460,123 @@ validate_legal_files() {
         || die "${YAML_MODULE}/LICENSE no longer contains its Apache-2.0 terms."
 }
 
-emit_index() {
-    local module licenses basis
-    printf '| Component | License(s) | Inventory basis |\n'
-    printf '|-----------|------------|-----------------|\n'
+module_version() {
+    local module="$1"
+    awk -v module="${module}" '$1 == "#" && $2 == module { print $3; exit }' "${MODULES_TXT}"
+}
+
+module_source_base() {
+    local module="$1" version revision
+    version=$(module_version "${module}")
+    [[ -n "${version}" ]] || die "could not determine the vendored version for ${module}."
+    revision="${version##*-}"
+    # Go pseudo-versions are not upstream Git tags.
+    if [[ "${version}" =~ [.-][0-9]{14}-[0-9a-f]{12}$ ]]; then
+        version="${revision}"
+    fi
+
+    case "${module}" in
+        github.com/NVIDIA/gpu-monitoring-tools)
+            printf 'https://github.com/NVIDIA/gpu-monitoring-tools/blob/%s/' "${revision}"
+            ;;
+        github.com/fsnotify/fsnotify)
+            printf 'https://github.com/fsnotify/fsnotify/blob/%s/' "${version}"
+            ;;
+        github.com/go-logr/logr)
+            printf 'https://github.com/go-logr/logr/blob/%s/' "${version}"
+            ;;
+        github.com/gogo/protobuf)
+            printf 'https://github.com/gogo/protobuf/blob/%s/' "${version}"
+            ;;
+        go.yaml.in/yaml/v3)
+            printf 'https://github.com/yaml/go-yaml/blob/%s/' "${version}"
+            ;;
+        golang.org/x/net)
+            printf 'https://github.com/golang/net/blob/%s/' "${version}"
+            ;;
+        golang.org/x/sys)
+            printf 'https://github.com/golang/sys/blob/%s/' "${version}"
+            ;;
+        golang.org/x/text)
+            printf 'https://github.com/golang/text/blob/%s/' "${version}"
+            ;;
+        google.golang.org/genproto/googleapis/rpc)
+            printf 'https://github.com/googleapis/go-genproto/blob/%s/' "${revision}"
+            ;;
+        google.golang.org/grpc)
+            printf 'https://github.com/grpc/grpc-go/blob/%s/' "${version}"
+            ;;
+        google.golang.org/protobuf)
+            printf 'https://github.com/protocolbuffers/protobuf-go/blob/%s/' "${version}"
+            ;;
+        k8s.io/klog/v2)
+            printf 'https://github.com/kubernetes/klog/blob/%s/' "${version}"
+            ;;
+        k8s.io/kubelet)
+            printf 'https://github.com/kubernetes/kubelet/blob/%s/' "${version}"
+            ;;
+        *)
+            die "no reviewed upstream license URL mapping for ${module}."
+            ;;
+    esac
+}
+
+# Build one registry for both the summary and reference list. Legal files and
+# versions come from the selected inventory, never a second hand-maintained list.
+build_license_references() {
+    LICENSE_REFERENCES="${WORK_DIR}/license-references.tsv"
+    local module licenses basis source_base file count index=0 ordinal suffix id
+    : > "${LICENSE_REFERENCES}"
     while IFS=, read -r module licenses basis; do
-        printf '| `%s` | %s | %s |\n' "${module}" "${licenses}" "${basis}"
+        index=$((index + 1))
+        source_base=$(module_source_base "${module}")
+        count=$(license_files_for_module "${module}" | wc -l | tr -d ' ')
+        (( count > 0 && count <= 26 )) || die "unsupported legal-file count for ${module}: ${count}"
+        ordinal=0
+        while IFS= read -r file; do
+            suffix=""
+            if (( count > 1 )); then
+                suffix=$(printf '%s' abcdefghijklmnopqrstuvwxyz | cut -c "$((ordinal + 1))")
+            fi
+            printf -v id 'L%02d%s' "${index}" "${suffix}"
+            printf '%s\t%s\t%s%s\n' "${module}" "${id}" "${source_base}" "$(basename "${file}")" >> "${LICENSE_REFERENCES}"
+            ordinal=$((ordinal + 1))
+        done < <(license_files_for_module "${module}")
     done < "${MODULE_INDEX}"
-    printf '| `pci.ids` | BSD-3-Clause (selected from GPL-2.0-or-later OR BSD-3-Clause) | shipped data file |\n'
+    printf 'pci.ids\tL%02d\t%s#L12-L18\n' "$((index + 1))" "${PCI_SOURCE_URL}" >> "${LICENSE_REFERENCES}"
+}
+
+references_for_module() {
+    awk -F '\t' -v module="$1" '$1 == module { printf "%s%s", sep, $2; sep=", " }' "${LICENSE_REFERENCES}"
+}
+
+emit_index() {
+    local module licenses basis version
+    printf '| Package | Version | License summary | License file |\n'
+    printf '|---------|---------|-----------------|--------------|\n'
+    while IFS=, read -r module licenses basis; do
+        version=$(module_version "${module}")
+        printf '| `%s` | `%s` | %s | %s |\n' \
+            "${module}" "${version}" "${licenses}" "$(references_for_module "${module}")"
+    done < "${MODULE_INDEX}"
+    printf '| `pci.ids` | `%s` | BSD-3-Clause (selected from GPL-2.0-or-later OR BSD-3-Clause) | %s |\n' \
+        "${PCI_IDS_VERSION}" "$(references_for_module pci.ids)"
+}
+
+emit_license_file_references() {
+    awk -F '\t' '{ printf "%-6s%s\n", $2, $3 }' "${LICENSE_REFERENCES}"
 }
 
 emit_module_sections() {
-    local module licenses basis file fence copyright_notices
+    local module licenses basis version source_base file fence copyright_notices
     while IFS=, read -r module licenses basis; do
+        version=$(module_version "${module}")
+        source_base=$(module_source_base "${module}")
+
         printf '### %s\n\n' "${module}"
-        printf '* License(s): %s\n' "${licenses}"
-        printf '* Inventory basis: %s\n' "${basis}"
+        printf '* Version: `%s`\n' "${version}"
+        printf '* License: %s\n' "${licenses}"
+        printf '* Location: [LICENSE](%sLICENSE)\n' "${source_base}"
         printf '* Bundled source: `vendor/%s`\n\n' "${module}"
 
         copyright_notices=$(copyrights_for_module "${module}")
@@ -479,14 +588,14 @@ emit_module_sections() {
         while IFS= read -r file; do
             [[ -n "${file}" ]] || continue
             fence=$(fence_for "${file}")
-            printf '#### %s\n\n' "$(basename "${file}")"
+            printf '#### [%s](%s%s)\n\n' \
+                "$(basename "${file}")" "${source_base}" "$(basename "${file}")"
             printf '%stext\n' "${fence}"
             cat "${file}"
             printf '\n%s\n\n' "${fence}"
         done < <(license_files_for_module "${module}")
     done < "${MODULE_INDEX}"
 }
-
 emit_pci_ids() {
     cat <<EOF
 ### pci.ids
@@ -497,8 +606,8 @@ emit_pci_ids() {
 * Version: \`${PCI_IDS_VERSION}\`
 * Chosen license: BSD-3-Clause
 * SHA-256: \`${PCI_IDS_SHA256}\`
-* Source location: ${PCI_SOURCE_URL}
-* Original source: PCI ID Project (https://pci-ids.ucw.cz/)
+* Source and license notice: [PCI ID database shipped with ${RELEASE_VERSION}](${PCI_SOURCE_URL}#L1-L18)
+* Original project: [PCI ID Project](https://pci-ids.ucw.cz/)
 * Copyright holders: Martin Mares and Albert Pool
 
 The PCI ID Project offers this file under GPL-2.0-or-later OR BSD-3-Clause.
@@ -546,65 +655,71 @@ EOF
 compose_document() {
     log "Composing ${OUTPUT}..."
     {
+        printf '# Third-Party Notices\n\nNVIDIA KubeVirt GPU Device Plugin %s\n\n' "${RELEASE_VERSION}"
         cat <<'EOF'
-# Third-Party Notices
-
-NVIDIA KubeVirt GPU Device Plugin
-
 Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
 
-This document contains notices and verbatim upstream legal files for the
-application-layer components NVIDIA adds to the released container image.
+This document reproduces notices for the application-layer third-party Go
+modules and shipped `pci.ids` data in the NVIDIA KubeVirt GPU Device Plugin
+container image. It is not a complete inventory of the container's software.
+The dependency inventory is based on the union of the application package
+graphs selected by the image's exact build command,
+`CGO_ENABLED=1 go build ./cmd`, for `linux/amd64` and `linux/arm64`. Go
+test-only packages are excluded. Go standard-library code is included in the
+compiled executable but is outside the third-party Go module inventory below.
+Notice coverage for Go runtime/standard-library code, other native code, and
+base-image packages requires separate review; it is not established by this
+application-module inventory or the base-image source index.
 
-The Go inventory is generated from the union of the dependency graphs for the
-exact container build command, `CGO_ENABLED=1 go build ./cmd`, on
-`linux/amd64` and `linux/arm64`. It is not generated from every package in
-`vendor/`; test-only dependencies such as Ginkgo and Gomega are therefore not
-included.
-
-Where a module's top-level legal files do not name its copyright holder, the
-copyright notices below are reproduced from source files selected by those
-same runtime build graphs and validated against a reviewed manifest.
+The `License file` identifiers in the third-party software summary map to the
+upstream legal files for the exact component versions. Corresponding source
+for application-layer components is present under `vendor/` in the release
+source archive.
 
 `go.yaml.in/yaml/v3` is retained as a narrow OSRB/nSpect-reviewed supplement.
-Its files ported from libyaml are MIT licensed (Copyright Kirill Simonov,
-2006-2010 and 2006-2011); the remaining files are Apache-2.0 licensed
-(Copyright Canonical Ltd). Both licenses apply to different files, so the
-classification is `Apache-2.0 AND MIT`, and both the upstream `LICENSE` and
-`NOTICE` are reproduced below.
+Its files ported from libyaml are MIT licensed; the remaining files are
+Apache-2.0 licensed. Both licenses apply to different files, so its
+classification is `Apache-2.0 AND MIT`.
 
-`pci.ids` is a shipped data file that Go dependency tooling cannot detect. Its
-reviewed metadata and the selected BSD-3-Clause license are included manually.
-
-The runtime base `nvcr.io/nvidia/distroless/go:v4.0.2` is not expanded into
-this inventory. Its notice and source obligations are handled by NVIDIA's
-base-image compliance process and must not be duplicated here unless that
-process determines otherwise.
+`pci.ids` is a shipped data file outside the Go module graph. The PCI ID
+Project offers it under GPL-2.0-or-later OR BSD-3-Clause; NVIDIA selects
+BSD-3-Clause for this distribution.
 
 EOF
-        printf 'The corresponding base-image source index is `%s`.\n\n' "${BASE_SOURCE_URL}"
+        printf 'The [%s source archive](%s) contains the exact vendored source and legal files used here.\n\n' \
+            "${RELEASE_VERSION}" "${APP_SOURCE_URL}"
         cat <<'EOF'
-Corresponding source for the application-layer components is published in the
-tagged NVIDIA repository source archive: vendored Go source under `vendor/`,
-the application source, and `utils/pci.ids`.
+## Container Base Image
 
 EOF
-        printf 'The release-specific source archive is `%s`.\n\n' "${APP_SOURCE_URL}"
+        printf 'The final runtime image is built from `%s`. Its operating-system packages are outside the Go dependency inventory below. The [NVIDIA Distroless OSS source index](%s) provides version-specific package sources and binaries. This source index is not a substitute for the base image\x27s license and notice texts.\n\n' \
+            "${RUNTIME_BASE_IMAGE}" "${BASE_SOURCE_URL}"
+        printf 'The build stage uses `%s`, but that builder filesystem is not redistributed in the final image; only the compiled application and pci.ids data file are copied from that stage.\n\n' \
+            "${BUILDER_IMAGE}"
+        printf '| Image | Version | Role | Notices and source |\n'
+        printf '|-------|---------|------|--------------------|\n'
+        printf '| `nvcr.io/nvidia/distroless/go` | `%s` | final runtime base | [NVIDIA Distroless OSS source index](%s) |\n\n' \
+            "${BASE_IMAGE_VERSION}" "${BASE_SOURCE_URL}"
         cat <<'EOF'
-This notice is also copied into the image at
-`/licenses/THIRD_PARTY_NOTICES.md` and attached byte-for-byte to
-each published GitHub Release.
-
-This file is generated. Run `make notices` to regenerate it and `make
-notices-check` to verify the committed copy.
-
-## Component Index
+## Third-Party Software Summary
 
 EOF
         emit_index
         cat <<'EOF'
 
-## Go Component License and Notice Texts
+## License-file references
+
+The identifiers in the `License file` column resolve to the exact upstream
+legal files for the redistributed versions. These external locations are
+supplemental; the corresponding legal texts are reproduced below.
+
+```text
+EOF
+        emit_license_file_references
+        cat <<'EOF'
+```
+
+## Third-Party Software License and Notice Texts
 
 EOF
         emit_module_sections
@@ -626,6 +741,7 @@ main() {
     build_module_index
     validate_legal_files
     validate_copyright_metadata
+    build_license_references
     compose_document
 
     local runtime_count total_count
@@ -634,4 +750,6 @@ main() {
     log "Wrote ${OUTPUT} (${runtime_count} runtime modules, ${total_count} reviewed Go modules, plus pci.ids)"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

@@ -80,6 +80,19 @@ jobs:
         id: setup-go-proxy
         uses: nv-gha-runners/setup-artifactory-go-proxy@main
 
+      - name: Read Go version
+        run: echo "GOLANG_VERSION=$(sed -n 's/^GOLANG_VERSION ?= //p' versions.mk)" >> "$GITHUB_ENV"
+
+      - name: Install Go for notice verification
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GOLANG_VERSION }}
+
+      - name: Verify notice before building or pushing
+        env:
+          GOPROXY: ${{ steps.setup-go-proxy.outputs.goproxy-url }}
+        run: make notices-check
+
       - name: Build image
         env:
           IMAGE_NAME: ghcr.io/${LOWERCASE_REPO_OWNER}/kubevirt-gpu-device-plugin

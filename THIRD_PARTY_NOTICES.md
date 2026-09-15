@@ -1,76 +1,101 @@
 # Third-Party Notices
 
-NVIDIA KubeVirt GPU Device Plugin
+NVIDIA KubeVirt GPU Device Plugin v1.6.0
 
 Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
 
-This document contains notices and verbatim upstream legal files for the
-application-layer components NVIDIA adds to the released container image.
+This document reproduces notices for the application-layer third-party Go
+modules and shipped `pci.ids` data in the NVIDIA KubeVirt GPU Device Plugin
+container image. It is not a complete inventory of the container's software.
+The dependency inventory is based on the union of the application package
+graphs selected by the image's exact build command,
+`CGO_ENABLED=1 go build ./cmd`, for `linux/amd64` and `linux/arm64`. Go
+test-only packages are excluded. Go standard-library code is included in the
+compiled executable but is outside the third-party Go module inventory below.
+Notice coverage for Go runtime/standard-library code, other native code, and
+base-image packages requires separate review; it is not established by this
+application-module inventory or the base-image source index.
 
-The Go inventory is generated from the union of the dependency graphs for the
-exact container build command, `CGO_ENABLED=1 go build ./cmd`, on
-`linux/amd64` and `linux/arm64`. It is not generated from every package in
-`vendor/`; test-only dependencies such as Ginkgo and Gomega are therefore not
-included.
-
-Where a module's top-level legal files do not name its copyright holder, the
-copyright notices below are reproduced from source files selected by those
-same runtime build graphs and validated against a reviewed manifest.
+The `License file` identifiers in the third-party software summary map to the
+upstream legal files for the exact component versions. Corresponding source
+for application-layer components is present under `vendor/` in the release
+source archive.
 
 `go.yaml.in/yaml/v3` is retained as a narrow OSRB/nSpect-reviewed supplement.
-Its files ported from libyaml are MIT licensed (Copyright Kirill Simonov,
-2006-2010 and 2006-2011); the remaining files are Apache-2.0 licensed
-(Copyright Canonical Ltd). Both licenses apply to different files, so the
-classification is `Apache-2.0 AND MIT`, and both the upstream `LICENSE` and
-`NOTICE` are reproduced below.
+Its files ported from libyaml are MIT licensed; the remaining files are
+Apache-2.0 licensed. Both licenses apply to different files, so its
+classification is `Apache-2.0 AND MIT`.
 
-`pci.ids` is a shipped data file that Go dependency tooling cannot detect. Its
-reviewed metadata and the selected BSD-3-Clause license are included manually.
+`pci.ids` is a shipped data file outside the Go module graph. The PCI ID
+Project offers it under GPL-2.0-or-later OR BSD-3-Clause; NVIDIA selects
+BSD-3-Clause for this distribution.
 
-The runtime base `nvcr.io/nvidia/distroless/go:v4.0.2` is not expanded into
-this inventory. Its notice and source obligations are handled by NVIDIA's
-base-image compliance process and must not be duplicated here unless that
-process determines otherwise.
+The [v1.6.0 source archive](https://github.com/NVIDIA/kubevirt-gpu-device-plugin/archive/refs/tags/v1.6.0.tar.gz) contains the exact vendored source and legal files used here.
 
-The corresponding base-image source index is `https://developer.download.nvidia.com/distroless-oss/go/v4.0.2/index.html`.
+## Container Base Image
 
-Corresponding source for the application-layer components is published in the
-tagged NVIDIA repository source archive: vendored Go source under `vendor/`,
-the application source, and `utils/pci.ids`.
+The final runtime image is built from `nvcr.io/nvidia/distroless/go:v4.1.1`. Its operating-system packages are outside the Go dependency inventory below. The [NVIDIA Distroless OSS source index](https://developer.download.nvidia.com/distroless-oss/go/v4.1.1/index.html) provides version-specific package sources and binaries. This source index is not a substitute for the base image's license and notice texts.
 
-The release-specific source archive is `https://github.com/NVIDIA/kubevirt-gpu-device-plugin/archive/refs/tags/v1.6.0.tar.gz`.
+The build stage uses `nvcr.io/nvidia/cuda:13.3.1-base-ubi9`, but that builder filesystem is not redistributed in the final image; only the compiled application and pci.ids data file are copied from that stage.
 
-This notice is also copied into the image at
-`/licenses/THIRD_PARTY_NOTICES.md` and attached byte-for-byte to
-each published GitHub Release.
+| Image | Version | Role | Notices and source |
+|-------|---------|------|--------------------|
+| `nvcr.io/nvidia/distroless/go` | `v4.1.1` | final runtime base | [NVIDIA Distroless OSS source index](https://developer.download.nvidia.com/distroless-oss/go/v4.1.1/index.html) |
 
-This file is generated. Run `make notices` to regenerate it and `make
-notices-check` to verify the committed copy.
+## Third-Party Software Summary
 
-## Component Index
+| Package | Version | License summary | License file |
+|---------|---------|-----------------|--------------|
+| `github.com/NVIDIA/gpu-monitoring-tools` | `v0.0.0-20211102125545-5a2c58442e48` | Apache-2.0 | L01 |
+| `github.com/fsnotify/fsnotify` | `v1.10.1` | BSD-3-Clause | L02 |
+| `github.com/go-logr/logr` | `v1.4.3` | Apache-2.0 | L03 |
+| `go.yaml.in/yaml/v3` | `v3.0.4` | Apache-2.0 AND MIT | L04a, L04b |
+| `golang.org/x/net` | `v0.58.0` | BSD-3-Clause | L05a, L05b |
+| `golang.org/x/sys` | `v0.47.0` | BSD-3-Clause | L06a, L06b |
+| `golang.org/x/text` | `v0.41.0` | BSD-3-Clause | L07a, L07b |
+| `google.golang.org/genproto/googleapis/rpc` | `v0.0.0-20260526163538-3dc84a4a5aaa` | Apache-2.0 | L08 |
+| `google.golang.org/grpc` | `v1.83.1` | Apache-2.0 | L09a, L09b, L09c |
+| `google.golang.org/protobuf` | `v1.36.12-0.20260120151049-f2248ac996af` | BSD-3-Clause | L10a, L10b |
+| `k8s.io/klog/v2` | `v2.140.0` | Apache-2.0 | L11 |
+| `k8s.io/kubelet` | `v0.36.3` | Apache-2.0 | L12 |
+| `pci.ids` | `2025.07.11` | BSD-3-Clause (selected from GPL-2.0-or-later OR BSD-3-Clause) | L13 |
 
-| Component | License(s) | Inventory basis |
-|-----------|------------|-----------------|
-| `github.com/NVIDIA/gpu-monitoring-tools` | Apache-2.0 | runtime graph |
-| `github.com/fsnotify/fsnotify` | BSD-3-Clause | runtime graph |
-| `github.com/go-logr/logr` | Apache-2.0 | runtime graph |
-| `go.yaml.in/yaml/v3` | Apache-2.0 AND MIT | OSRB/nSpect reviewed supplement |
-| `golang.org/x/net` | BSD-3-Clause | runtime graph |
-| `golang.org/x/sys` | BSD-3-Clause | runtime graph |
-| `golang.org/x/text` | BSD-3-Clause | runtime graph |
-| `google.golang.org/genproto/googleapis/rpc` | Apache-2.0 | runtime graph |
-| `google.golang.org/grpc` | Apache-2.0 | runtime graph |
-| `google.golang.org/protobuf` | BSD-3-Clause | runtime graph |
-| `k8s.io/klog/v2` | Apache-2.0 | runtime graph |
-| `k8s.io/kubelet` | Apache-2.0 | runtime graph |
-| `pci.ids` | BSD-3-Clause (selected from GPL-2.0-or-later OR BSD-3-Clause) | shipped data file |
+## License-file references
 
-## Go Component License and Notice Texts
+The identifiers in the `License file` column resolve to the exact upstream
+legal files for the redistributed versions. These external locations are
+supplemental; the corresponding legal texts are reproduced below.
+
+```text
+L01   https://github.com/NVIDIA/gpu-monitoring-tools/blob/5a2c58442e48/LICENSE
+L02   https://github.com/fsnotify/fsnotify/blob/v1.10.1/LICENSE
+L03   https://github.com/go-logr/logr/blob/v1.4.3/LICENSE
+L04a  https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE
+L04b  https://github.com/yaml/go-yaml/blob/v3.0.4/NOTICE
+L05a  https://github.com/golang/net/blob/v0.58.0/LICENSE
+L05b  https://github.com/golang/net/blob/v0.58.0/PATENTS
+L06a  https://github.com/golang/sys/blob/v0.47.0/LICENSE
+L06b  https://github.com/golang/sys/blob/v0.47.0/PATENTS
+L07a  https://github.com/golang/text/blob/v0.41.0/LICENSE
+L07b  https://github.com/golang/text/blob/v0.41.0/PATENTS
+L08   https://github.com/googleapis/go-genproto/blob/3dc84a4a5aaa/LICENSE
+L09a  https://github.com/grpc/grpc-go/blob/v1.83.1/AUTHORS
+L09b  https://github.com/grpc/grpc-go/blob/v1.83.1/LICENSE
+L09c  https://github.com/grpc/grpc-go/blob/v1.83.1/NOTICE.txt
+L10a  https://github.com/protocolbuffers/protobuf-go/blob/f2248ac996af/LICENSE
+L10b  https://github.com/protocolbuffers/protobuf-go/blob/f2248ac996af/PATENTS
+L11   https://github.com/kubernetes/klog/blob/v2.140.0/LICENSE
+L12   https://github.com/kubernetes/kubelet/blob/v0.36.3/LICENSE
+L13   https://github.com/NVIDIA/kubevirt-gpu-device-plugin/blob/v1.6.0/utils/pci.ids#L12-L18
+```
+
+## Third-Party Software License and Notice Texts
 
 ### github.com/NVIDIA/gpu-monitoring-tools
 
-* License(s): Apache-2.0
-* Inventory basis: runtime graph
+* Version: `v0.0.0-20211102125545-5a2c58442e48`
+* License: Apache-2.0
+* Location: [LICENSE](https://github.com/NVIDIA/gpu-monitoring-tools/blob/5a2c58442e48/LICENSE)
 * Bundled source: `vendor/github.com/NVIDIA/gpu-monitoring-tools`
 
 #### Copyright notices
@@ -82,7 +107,7 @@ Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 Copyright 1993-2020 NVIDIA Corporation.  All rights reserved.
 ```
 
-#### LICENSE
+#### [LICENSE](https://github.com/NVIDIA/gpu-monitoring-tools/blob/5a2c58442e48/LICENSE)
 
 ```text
 
@@ -292,11 +317,12 @@ Copyright 1993-2020 NVIDIA Corporation.  All rights reserved.
 
 ### github.com/fsnotify/fsnotify
 
-* License(s): BSD-3-Clause
-* Inventory basis: runtime graph
+* Version: `v1.10.1`
+* License: BSD-3-Clause
+* Location: [LICENSE](https://github.com/fsnotify/fsnotify/blob/v1.10.1/LICENSE)
 * Bundled source: `vendor/github.com/fsnotify/fsnotify`
 
-#### LICENSE
+#### [LICENSE](https://github.com/fsnotify/fsnotify/blob/v1.10.1/LICENSE)
 
 ```text
 Copyright © 2012 The Go Authors. All rights reserved.
@@ -329,8 +355,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### github.com/go-logr/logr
 
-* License(s): Apache-2.0
-* Inventory basis: runtime graph
+* Version: `v1.4.3`
+* License: Apache-2.0
+* Location: [LICENSE](https://github.com/go-logr/logr/blob/v1.4.3/LICENSE)
 * Bundled source: `vendor/github.com/go-logr/logr`
 
 #### Copyright notices
@@ -341,7 +368,7 @@ Copyright 2020 The logr Authors.
 Copyright 2023 The logr Authors.
 ```
 
-#### LICENSE
+#### [LICENSE](https://github.com/go-logr/logr/blob/v1.4.3/LICENSE)
 
 ```text
                                  Apache License
@@ -550,11 +577,12 @@ Copyright 2023 The logr Authors.
 
 ### go.yaml.in/yaml/v3
 
-* License(s): Apache-2.0 AND MIT
-* Inventory basis: OSRB/nSpect reviewed supplement
+* Version: `v3.0.4`
+* License: Apache-2.0 AND MIT
+* Location: [LICENSE](https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE)
 * Bundled source: `vendor/go.yaml.in/yaml/v3`
 
-#### LICENSE
+#### [LICENSE](https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE)
 
 ```text
 
@@ -610,7 +638,7 @@ limitations under the License.
 
 ```
 
-#### NOTICE
+#### [NOTICE](https://github.com/yaml/go-yaml/blob/v3.0.4/NOTICE)
 
 ```text
 Copyright 2011-2016 Canonical Ltd.
@@ -631,11 +659,12 @@ limitations under the License.
 
 ### golang.org/x/net
 
-* License(s): BSD-3-Clause
-* Inventory basis: runtime graph
+* Version: `v0.58.0`
+* License: BSD-3-Clause
+* Location: [LICENSE](https://github.com/golang/net/blob/v0.58.0/LICENSE)
 * Bundled source: `vendor/golang.org/x/net`
 
-#### LICENSE
+#### [LICENSE](https://github.com/golang/net/blob/v0.58.0/LICENSE)
 
 ```text
 Copyright 2009 The Go Authors.
@@ -668,7 +697,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
-#### PATENTS
+#### [PATENTS](https://github.com/golang/net/blob/v0.58.0/PATENTS)
 
 ```text
 Additional IP Rights Grant (Patents)
@@ -698,11 +727,12 @@ shall terminate as of the date such litigation is filed.
 
 ### golang.org/x/sys
 
-* License(s): BSD-3-Clause
-* Inventory basis: runtime graph
+* Version: `v0.47.0`
+* License: BSD-3-Clause
+* Location: [LICENSE](https://github.com/golang/sys/blob/v0.47.0/LICENSE)
 * Bundled source: `vendor/golang.org/x/sys`
 
-#### LICENSE
+#### [LICENSE](https://github.com/golang/sys/blob/v0.47.0/LICENSE)
 
 ```text
 Copyright 2009 The Go Authors.
@@ -735,7 +765,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
-#### PATENTS
+#### [PATENTS](https://github.com/golang/sys/blob/v0.47.0/PATENTS)
 
 ```text
 Additional IP Rights Grant (Patents)
@@ -765,11 +795,12 @@ shall terminate as of the date such litigation is filed.
 
 ### golang.org/x/text
 
-* License(s): BSD-3-Clause
-* Inventory basis: runtime graph
+* Version: `v0.41.0`
+* License: BSD-3-Clause
+* Location: [LICENSE](https://github.com/golang/text/blob/v0.41.0/LICENSE)
 * Bundled source: `vendor/golang.org/x/text`
 
-#### LICENSE
+#### [LICENSE](https://github.com/golang/text/blob/v0.41.0/LICENSE)
 
 ```text
 Copyright 2009 The Go Authors.
@@ -802,7 +833,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
-#### PATENTS
+#### [PATENTS](https://github.com/golang/text/blob/v0.41.0/PATENTS)
 
 ```text
 Additional IP Rights Grant (Patents)
@@ -832,8 +863,9 @@ shall terminate as of the date such litigation is filed.
 
 ### google.golang.org/genproto/googleapis/rpc
 
-* License(s): Apache-2.0
-* Inventory basis: runtime graph
+* Version: `v0.0.0-20260526163538-3dc84a4a5aaa`
+* License: Apache-2.0
+* Location: [LICENSE](https://github.com/googleapis/go-genproto/blob/3dc84a4a5aaa/LICENSE)
 * Bundled source: `vendor/google.golang.org/genproto/googleapis/rpc`
 
 #### Copyright notices
@@ -842,7 +874,7 @@ shall terminate as of the date such litigation is filed.
 Copyright 2026 Google LLC
 ```
 
-#### LICENSE
+#### [LICENSE](https://github.com/googleapis/go-genproto/blob/3dc84a4a5aaa/LICENSE)
 
 ```text
 
@@ -1052,18 +1084,19 @@ Copyright 2026 Google LLC
 
 ### google.golang.org/grpc
 
-* License(s): Apache-2.0
-* Inventory basis: runtime graph
+* Version: `v1.83.1`
+* License: Apache-2.0
+* Location: [LICENSE](https://github.com/grpc/grpc-go/blob/v1.83.1/LICENSE)
 * Bundled source: `vendor/google.golang.org/grpc`
 
-#### AUTHORS
+#### [AUTHORS](https://github.com/grpc/grpc-go/blob/v1.83.1/AUTHORS)
 
 ```text
 Google Inc.
 
 ```
 
-#### LICENSE
+#### [LICENSE](https://github.com/grpc/grpc-go/blob/v1.83.1/LICENSE)
 
 ```text
 
@@ -1271,7 +1304,7 @@ Google Inc.
 
 ```
 
-#### NOTICE.txt
+#### [NOTICE.txt](https://github.com/grpc/grpc-go/blob/v1.83.1/NOTICE.txt)
 
 ```text
 Copyright 2014 gRPC authors.
@@ -1292,11 +1325,12 @@ limitations under the License.
 
 ### google.golang.org/protobuf
 
-* License(s): BSD-3-Clause
-* Inventory basis: runtime graph
+* Version: `v1.36.12-0.20260120151049-f2248ac996af`
+* License: BSD-3-Clause
+* Location: [LICENSE](https://github.com/protocolbuffers/protobuf-go/blob/f2248ac996af/LICENSE)
 * Bundled source: `vendor/google.golang.org/protobuf`
 
-#### LICENSE
+#### [LICENSE](https://github.com/protocolbuffers/protobuf-go/blob/f2248ac996af/LICENSE)
 
 ```text
 Copyright (c) 2018 The Go Authors. All rights reserved.
@@ -1329,7 +1363,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ```
 
-#### PATENTS
+#### [PATENTS](https://github.com/protocolbuffers/protobuf-go/blob/f2248ac996af/PATENTS)
 
 ```text
 Additional IP Rights Grant (Patents)
@@ -1359,8 +1393,9 @@ shall terminate as of the date such litigation is filed.
 
 ### k8s.io/klog/v2
 
-* License(s): Apache-2.0
-* Inventory basis: runtime graph
+* Version: `v2.140.0`
+* License: Apache-2.0
+* Location: [LICENSE](https://github.com/kubernetes/klog/blob/v2.140.0/LICENSE)
 * Bundled source: `vendor/k8s.io/klog/v2`
 
 #### Copyright notices
@@ -1373,7 +1408,7 @@ Copyright 2022 The Kubernetes Authors.
 Copyright 2023 The Kubernetes Authors.
 ```
 
-#### LICENSE
+#### [LICENSE](https://github.com/kubernetes/klog/blob/v2.140.0/LICENSE)
 
 ```text
 Apache License
@@ -1572,8 +1607,9 @@ third-party archives.
 
 ### k8s.io/kubelet
 
-* License(s): Apache-2.0
-* Inventory basis: runtime graph
+* Version: `v0.36.3`
+* License: Apache-2.0
+* Location: [LICENSE](https://github.com/kubernetes/kubelet/blob/v0.36.3/LICENSE)
 * Bundled source: `vendor/k8s.io/kubelet`
 
 #### Copyright notices
@@ -1583,7 +1619,7 @@ Copyright 2018 The Kubernetes Authors.
 Copyright The Kubernetes Authors.
 ```
 
-#### LICENSE
+#### [LICENSE](https://github.com/kubernetes/kubelet/blob/v0.36.3/LICENSE)
 
 ```text
 
@@ -1802,8 +1838,8 @@ Copyright The Kubernetes Authors.
 * Version: `2025.07.11`
 * Chosen license: BSD-3-Clause
 * SHA-256: `a96cd22db83c10d9141ecd7b14325ed9c936de5ef01d78e7e7e43f070184270b`
-* Source location: https://github.com/NVIDIA/kubevirt-gpu-device-plugin/blob/v1.6.0/utils/pci.ids
-* Original source: PCI ID Project (https://pci-ids.ucw.cz/)
+* Source and license notice: [PCI ID database shipped with v1.6.0](https://github.com/NVIDIA/kubevirt-gpu-device-plugin/blob/v1.6.0/utils/pci.ids#L1-L18)
+* Original project: [PCI ID Project](https://pci-ids.ucw.cz/)
 * Copyright holders: Martin Mares and Albert Pool
 
 The PCI ID Project offers this file under GPL-2.0-or-later OR BSD-3-Clause.

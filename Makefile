@@ -95,7 +95,8 @@ notices: install-tools
 	@bash tools/generate-notices.sh
 
 notices-check: install-tools
-	@tmp="$$(mktemp)"; \
+	@bash tools/notices/test-generator.sh
+	@set -eu; tmp="$$(mktemp)"; \
 	trap 'rm -f "$$tmp"' EXIT; \
 	OUTPUT="$$tmp" bash tools/generate-notices.sh; \
 	diff -u THIRD_PARTY_NOTICES.md "$$tmp" \
